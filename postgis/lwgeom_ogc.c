@@ -69,6 +69,8 @@ Datum LWGEOM_endpoint_linestring(PG_FUNCTION_ARGS);
 Datum LWGEOM_asText(PG_FUNCTION_ARGS);
 /* ---- AsBinary(geometry, [XDR|NDR]) */
 Datum LWGEOM_asBinary(PG_FUNCTION_ARGS);
+/* ---- CDB_AsBinary(geometry, [XDR|NDR]) */
+Datum LWGEOM_CDB_asBinary(PG_FUNCTION_ARGS);
 /* ---- GeometryFromText(text, integer) */
 Datum LWGEOM_from_text(PG_FUNCTION_ARGS);
 /* ---- GeomFromWKB(bytea, integer) */
@@ -895,6 +897,8 @@ Datum LWGEOM_asBinary(PG_FUNCTION_ARGS)
 	PG_FREE_IF_COPY(geom, 0);
 	PG_RETURN_BYTEA_P(result);
 }
+
+#include "cdb_wkb.c"
 
 
 

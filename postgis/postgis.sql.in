@@ -3982,6 +3982,12 @@ CREATE OR REPLACE FUNCTION ST_AsBinary(geometry)
 	AS 'MODULE_PATHNAME','LWGEOM_asBinary'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 	
+-- Cartodb optimized WBK
+CREATE OR REPLACE FUNCTION ST_CDB_AsBinary(geometry)
+	RETURNS bytea
+	AS 'MODULE_PATHNAME','LWGEOM_CDB_asBinary'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+	
 -- PostGIS equivalent function: AsText(geometry)
 CREATE OR REPLACE FUNCTION ST_AsText(geometry)
 	RETURNS TEXT
