@@ -1072,3 +1072,8 @@ uint8_t* lwgeom_agg_to_twkb(const twkb_geom_arrays *lwgeom_arrays,uint8_t varian
 	return wkb_out;
 	
 }
+
+char* lwgeom_to_hextwkb(const LWGEOM *geom, uint8_t variant, size_t *size_out)
+{
+	return (char*)lwgeom_to_twkb(geom, variant | WKB_HEX, size_out, 7, 0);
+}

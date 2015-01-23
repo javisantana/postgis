@@ -95,7 +95,7 @@ Datum LWGEOM_in(PG_FUNCTION_ARGS)
 		size_t hexsize = strlen(str);
 		unsigned char *wkb = bytes_from_hexbytes(str, hexsize);
 		/* TODO: 20101206: No parser checks! This is inline with current 1.5 behavior, but needs discussion */
-		lwgeom = lwgeom_from_wkb(wkb, hexsize/2, LW_PARSER_CHECK_NONE);
+		lwgeom = lwgeom_from_twkb(wkb, hexsize/2, LW_PARSER_CHECK_NONE);
 		/* If we picked up an SRID at the head of the WKB set it manually */
 		if ( srid ) lwgeom_set_srid(lwgeom, srid);
 		/* Add a bbox if necessary */
@@ -237,7 +237,7 @@ Datum LWGEOM_out(PG_FUNCTION_ARGS)
 	size_t hexwkb_size;
 
 	lwgeom = lwgeom_from_gserialized(geom);
-	hexwkb = lwgeom_to_hexwkb(lwgeom, WKB_EXTENDED, &hexwkb_size);
+	hexwkb = lwgeom_to_hextwkb(lwgeom, WKB_EXTENDED, &hexwkb_size);
 	lwgeom_free(lwgeom);
 	
 	PG_RETURN_CSTRING(hexwkb);
@@ -577,7 +577,7 @@ Datum LWGEOM_recv(PG_FUNCTION_ARGS)
 		geom_typmod = PG_GETARG_INT32(2);
 	}
 	
-	lwgeom = lwgeom_from_wkb((uint8_t*)buf->data, buf->len, LW_PARSER_CHECK_ALL);
+	lwgeom = lwgeom_from_twkb((uint8_t*)buf->data, buf->len, LW_PARSER_CHECK_ALL);
 
 	if ( lwgeom_needs_bbox(lwgeom) )
 		lwgeom_add_bbox(lwgeom);
@@ -611,9 +611,10 @@ Datum LWGEOM_send(PG_FUNCTION_ARGS)
 
 	PG_RETURN_POINTER(
 	  DatumGetPointer(
-	    DirectFunctionCall1(
-	      WKBFromLWGEOM, 
-	      PG_GETARG_DATUM(0)
+	    DirectFunctionCall2(
+	      TWKBFromLWGEOM,
+	      PG_GETARG_DATUM(0),
+          7
 	    )));
 }
 
