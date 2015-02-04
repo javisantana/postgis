@@ -44,16 +44,22 @@ int gserialized_ndims(const GSERIALIZED *gser)
 
 uint32_t gserialized_get_type(const GSERIALIZED *s)
 {
-	uint32_t *ptr;
+	uint8_t *ptr;
 	assert(s);
-	ptr = (uint32_t*)(s->data);
+	ptr = (uint8_t*)(s->data);
 	LWDEBUG(4,"entered");
 	if ( FLAGS_GET_BBOX(s->flags) )
 	{
+        //TODO. this should not work
 		LWDEBUGF(4,"skipping forward past bbox (%d bytes)",gbox_serialized_size(s->flags));
-		ptr += (gbox_serialized_size(s->flags) / sizeof(uint32_t));
+		//ptr += (gbox_serialized_size(s->flags) / sizeof(uint32_t));
 	}
-	return *ptr;
+    // skip magic byte
+    LWDEBUGF(4,"twkb magic (%x bytes)", ptr);
+    ++ptr;
+    LWDEBUGF(4,"twkb type %d", *ptr & 0x1F);
+    // read twkb type
+	return *ptr & 0x1F;
 }
 
 int32_t gserialized_get_srid(const GSERIALIZED *s)
@@ -416,6 +422,7 @@ size_t gserialized_from_lwgeom_size(const LWGEOM *geom)
 	if ( geom->bbox )
 		size += gbox_serialized_size(geom->flags);	
 		
+
 	size += gserialized_from_any_size(geom);
 	LWDEBUGF(3, "g_serialize size = %d", size);
 	
@@ -781,6 +788,7 @@ GSERIALIZED* gserialized_from_lwgeom(LWGEOM *geom, int is_geodetic, size_t *size
 	size_t return_size = 0;
 	uint8_t *serialized = NULL;
 	uint8_t *ptr = NULL;
+    size_t geom_size = 0;
 	GSERIALIZED *g = NULL;
 	assert(geom);
 
@@ -795,11 +803,24 @@ GSERIALIZED* gserialized_from_lwgeom(LWGEOM *geom, int is_geodetic, size_t *size
 	/*
 	** Harmonize the flags to the state of the lwgeom 
 	*/
-	if ( geom->bbox )
+	/*if ( geom->bbox )
 		FLAGS_SET_BBOX(geom->flags, 1);
 
+    */
+	FLAGS_SET_BBOX(geom->flags, 0);
 	/* Set up the uint8_t buffer into which we are going to write the serialized geometry. */
-	expected_size = gserialized_from_lwgeom_size(geom);
+
+    /* serialize geometry into twkb */
+    uint8_t *twkb = lwgeom_to_twkb(geom, 0, &expected_size, 7, 0);
+	LWDEBUGF(4, "encoded twkb size %d", expected_size);
+    geom_size = expected_size;
+	/*if ( geom->bbox )
+		expected_size += gbox_serialized_size(geom->flags);	
+    */
+
+    // header
+    expected_size += 8;
+
 	serialized = lwalloc(expected_size);
 	ptr = serialized;
 
@@ -807,11 +828,13 @@ GSERIALIZED* gserialized_from_lwgeom(LWGEOM *geom, int is_geodetic, size_t *size
 	ptr += 8;
 
 	/* Write in the serialized form of the gbox, if necessary. */
-	if ( geom->bbox )
+	/*if ( geom->bbox )
 		ptr += gserialized_from_gbox(geom->bbox, ptr);
+        */
 
 	/* Write in the serialized form of the geometry. */
-	ptr += gserialized_from_lwgeom_any(geom, ptr);
+    memcpy(ptr, twkb, geom_size);
+	ptr += geom_size;
 
 	/* Calculate size as returned by data processing functions. */
 	return_size = ptr - serialized;
@@ -1125,6 +1148,7 @@ LWGEOM* lwgeom_from_gserialized(const GSERIALIZED *g)
 	int32_t g_srid = 0;
 	uint32_t g_type = 0;
 	uint8_t *data_ptr = NULL;
+	uint8_t *ptr = NULL;
 	LWGEOM *lwgeom = NULL;
 	GBOX bbox;
 	size_t g_size = 0;
@@ -1136,11 +1160,16 @@ LWGEOM* lwgeom_from_gserialized(const GSERIALIZED *g)
 	g_type = gserialized_get_type(g);
 	LWDEBUGF(4, "Got type %d (%s), srid=%d", g_type, lwtype_name(g_type), g_srid);
 
-	data_ptr = (uint8_t*)g->data;
+	ptr = data_ptr = (uint8_t*)g->data;
 	if ( FLAGS_GET_BBOX(g_flags) )
-		data_ptr += gbox_serialized_size(g_flags);
+		ptr += gbox_serialized_size(g_flags);
 
-	lwgeom = lwgeom_from_gserialized_buffer(data_ptr, g_flags, &g_size);
+    g_size = SIZE_GET(g->size) - (ptr - (uint8_t*)g);
+	LWDEBUGF(4, "reading twkb size %d", g_size);
+    lwgeom = lwgeom_from_twkb(ptr, g_size, 0);
+
+
+	//lwgeom = lwgeom_from_gserialized_buffer(data_ptr, g_flags, &g_size);
 
 	if ( ! lwgeom ) 
 		lwerror("lwgeom_from_gserialized: unable create geometry"); /* Ooops! */
