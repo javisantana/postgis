@@ -927,7 +927,7 @@ extern LWGEOM* lwgeom_force_3dz(const LWGEOM *geom);
 extern LWGEOM* lwgeom_force_3dm(const LWGEOM *geom);
 extern LWGEOM* lwgeom_force_4d(const LWGEOM *geom);
 
-extern LWGEOM* lwgeom_simplify(const LWGEOM *igeom, double dist);
+extern LWGEOM* lwgeom_simplify(const LWGEOM *igeom, double dist, uint8_t flags);
 extern LWGEOM* lwgeom_set_effective_area(const LWGEOM *igeom, double area);
 
 /* 
@@ -1841,6 +1841,9 @@ LWGEOM_UNPARSER_RESULT;
 #define TWKB_BBOXES 0x04 /*User wants bboxes*/
 #define TWKB_NO_TYPE 0x08 /*No type because it is a sub geoemtry*/
 #define TWKB_NO_ID 0x10 /*No ID because it is a subgeoemtry*/
+
+/* simplification flags */
+#define SIM_PRESERVE_GEOM 0x01
 
 /*
 ** New parsing and unparsing functions.

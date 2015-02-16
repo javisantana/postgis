@@ -475,7 +475,7 @@ int lwline_count_vertices(LWLINE *line)
 	return line->points->npoints;
 }
 
-LWLINE* lwline_simplify(const LWLINE *iline, double dist)
+LWLINE* lwline_simplify(const LWLINE *iline, double dist, uint8_t flags)
 {
 	LWLINE *oline;
 
@@ -485,7 +485,10 @@ LWLINE* lwline_simplify(const LWLINE *iline, double dist)
 	if( lwline_is_empty(iline) )
 		return lwline_clone(iline);
 		
-	static const int minvertices = 0; /* TODO: allow setting this */
+	int minvertices = 0; /* TODO: allow setting this */
+	if (flags & SIM_PRESERVE_GEOM) {
+		minvertices = 2;
+	}
 	oline = lwline_construct(iline->srid, NULL, ptarray_simplify(iline->points, dist, minvertices));
 	oline->type = iline->type;
 	return oline;

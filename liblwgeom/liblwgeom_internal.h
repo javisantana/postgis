@@ -185,9 +185,9 @@ extern int32_t lw_get_int32_t(const uint8_t *loc);
  * @param minpts minimun number of points to retain, if possible.
  */
 POINTARRAY* ptarray_simplify(POINTARRAY *inpts, double epsilon, unsigned int minpts);
-LWLINE* lwline_simplify(const LWLINE *iline, double dist);
-LWPOLY* lwpoly_simplify(const LWPOLY *ipoly, double dist);
-LWCOLLECTION* lwcollection_simplify(const LWCOLLECTION *igeom, double dist);
+LWLINE* lwline_simplify(const LWLINE *iline, double dist, uint8_t flags);
+LWPOLY* lwpoly_simplify(const LWPOLY *ipoly, double dist, uint8_t flags);
+LWCOLLECTION* lwcollection_simplify(const LWCOLLECTION *igeom, double dist, uint8_t flags);
 
 /*
 * Computational geometry

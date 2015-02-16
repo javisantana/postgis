@@ -1482,7 +1482,7 @@ POINTARRAY *
 ptarray_simplify(POINTARRAY *inpts, double epsilon, unsigned int minpts)
 {
 	int *stack;			/* recursion stack */
-	int sp=-1;			/* recursion stack pointer */
+	int sp=0;			/* recursion stack pointer */
 	int p1, split;
 	double dist;
 	POINTARRAY *outpts;
@@ -1491,11 +1491,15 @@ ptarray_simplify(POINTARRAY *inpts, double epsilon, unsigned int minpts)
 	/* Allocate recursion stack */
 	stack = lwalloc(sizeof(int)*inpts->npoints);
 
-	p1 = 0;
-	stack[++sp] = inpts->npoints-1;
+	if (inpts->npoints < minpts) {
+		lwerror("min number of points is greater than geometry points");
+	}
 
-	LWDEBUGF(2, "Input has %d pts and %d dims", inpts->npoints,
-	                                            FLAGS_NDIMS(inpts->flags));
+	p1 = 0;
+	stack[sp] = inpts->npoints-1;
+
+	LWDEBUGF(2, "Input has %d pts and %d dims. Min poinds %d", inpts->npoints,
+	                                            FLAGS_NDIMS(inpts->flags), minpts);
 
 	/* Allocate output POINTARRAY, and add first point. */
 	outpts = ptarray_construct_empty(FLAGS_GET_Z(inpts->flags), FLAGS_GET_M(inpts->flags), inpts->npoints);
@@ -1509,9 +1513,10 @@ ptarray_simplify(POINTARRAY *inpts, double epsilon, unsigned int minpts)
 
 		ptarray_dp_findsplit(inpts, p1, stack[sp], &split, &dist);
 
-		LWDEBUGF(3, "Farthest point from P%d-P%d is P%d (dist. %g)", p1, stack[sp], split, dist);
+		LWDEBUGF(3, "Farthest point from P%d-P%d is P%d (dist. %g) (expected output: %d, %d)", p1, stack[sp], split, dist, outpts->npoints+sp +1, minpts);
 
-		if (dist > epsilon || ( outpts->npoints+sp+1 < minpts && dist > 0 ) )
+		// dist == -1 when there are only two points
+		if (dist > epsilon || ( outpts->npoints+sp+1 < minpts && dist >= 0 ) )
 		{
 			LWDEBUGF(4, "Added P%d to stack (outpts:%d)", split, sp);
 			stack[++sp] = split;
@@ -1519,7 +1524,7 @@ ptarray_simplify(POINTARRAY *inpts, double epsilon, unsigned int minpts)
 		else
 		{
 			getPoint4d_p(inpts, stack[sp], &pt);
-			ptarray_append_point(outpts, &pt, LW_FALSE);
+			ptarray_append_point(outpts, &pt, outpts->npoints < minpts ? LW_TRUE : LW_FALSE);
 			
 			LWDEBUGF(4, "Added P%d to simplified point array (size: %d)", stack[sp], outpts->npoints);
 

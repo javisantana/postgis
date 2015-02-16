@@ -503,7 +503,7 @@ int lwcollection_count_vertices(LWCOLLECTION *col)
 	return v;
 }
 
-LWCOLLECTION* lwcollection_simplify(const LWCOLLECTION *igeom, double dist)
+LWCOLLECTION* lwcollection_simplify(const LWCOLLECTION *igeom, double dist, uint8_t flags)
 {
  	int i;
 	LWCOLLECTION *out = lwcollection_construct_empty(igeom->type, igeom->srid, FLAGS_GET_Z(igeom->flags), FLAGS_GET_M(igeom->flags));
@@ -513,7 +513,7 @@ LWCOLLECTION* lwcollection_simplify(const LWCOLLECTION *igeom, double dist)
 
 	for( i = 0; i < igeom->ngeoms; i++ )
 	{
-		LWGEOM *ngeom = lwgeom_simplify(igeom->geoms[i], dist);
+		LWGEOM *ngeom = lwgeom_simplify(igeom->geoms[i], dist, flags);
 		if ( ngeom ) out = lwcollection_add_lwgeom(out, ngeom);
 	}
 

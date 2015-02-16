@@ -31,6 +31,7 @@
 
 /* Prototypes */
 Datum LWGEOM_simplify2d(PG_FUNCTION_ARGS);
+Datum LWGEOM_SimplifyPreserveStructure(PG_FUNCTION_ARGS);
 Datum LWGEOM_SetEffectiveArea(PG_FUNCTION_ARGS);
 Datum ST_LineCrossingDirection(PG_FUNCTION_ARGS);
 
@@ -56,7 +57,38 @@ Datum LWGEOM_simplify2d(PG_FUNCTION_ARGS)
 	dist = PG_GETARG_FLOAT8(1);
 	in = lwgeom_from_gserialized(geom);
 
-	out = lwgeom_simplify(in, dist);
+	out = lwgeom_simplify(in, dist, 0);
+	if ( ! out ) PG_RETURN_NULL();
+
+	/* COMPUTE_BBOX TAINTING */
+	if ( in->bbox ) lwgeom_add_bbox(out);
+
+	result = geometry_serialize(out);
+	lwgeom_free(out);
+	PG_FREE_IF_COPY(geom, 0);
+	PG_RETURN_POINTER(result);
+}
+
+PG_FUNCTION_INFO_V1(LWGEOM_SimplifyPreserveStructure);
+Datum LWGEOM_SimplifyPreserveStructure(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+	GSERIALIZED *result;
+	int type = gserialized_get_type(geom);
+	LWGEOM *in;
+	LWGEOM *out;
+	double dist;
+	uint8_t flags;
+
+  if ( type == POINTTYPE || type == MULTIPOINTTYPE )
+    PG_RETURN_POINTER(geom);
+
+	dist = PG_GETARG_FLOAT8(1);
+	in = lwgeom_from_gserialized(geom);
+
+	dist = PG_GETARG_DATUM(1);
+	flags = PG_GETARG_INT32(2);
+	out = lwgeom_simplify(in, dist, flags);
 	if ( ! out ) PG_RETURN_NULL();
 
 	/* COMPUTE_BBOX TAINTING */
@@ -73,7 +105,7 @@ Datum LWGEOM_SetEffectiveArea(PG_FUNCTION_ARGS)
 {
 	GSERIALIZED *geom = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 	GSERIALIZED *result;
-  int type = gserialized_get_type(geom);
+	int type = gserialized_get_type(geom);
 	LWGEOM *in;
 	LWGEOM *out;
 	double area;

@@ -348,9 +348,16 @@ int lwpoly_count_vertices(LWPOLY *poly)
 	return v;
 }
 
-LWPOLY* lwpoly_simplify(const LWPOLY *ipoly, double dist)
+LWPOLY* lwpoly_simplify(const LWPOLY *ipoly, double dist, uint8_t flags)
 {
 	int i;
+	int minvertices = 0;
+
+	if (flags & SIM_PRESERVE_GEOM) {
+		minvertices = 4;
+		LWDEBUG(2, "preserving geometry");
+	}
+
 	LWPOLY *opoly = lwpoly_construct_empty(ipoly->srid, FLAGS_GET_Z(ipoly->flags), FLAGS_GET_M(ipoly->flags));
 
 	LWDEBUGF(2, "simplify_polygon3d: simplifying polygon with %d rings", ipoly->nrings);
@@ -360,7 +367,6 @@ LWPOLY* lwpoly_simplify(const LWPOLY *ipoly, double dist)
 
 	for (i = 0; i < ipoly->nrings; i++)
 	{
-		static const int minvertices = 0; /* TODO: allow setting this */
 		POINTARRAY *opts = ptarray_simplify(ipoly->rings[i], dist, minvertices);
 
 		LWDEBUGF(3, "ring%d simplified from %d to %d points", i, ipoly->rings[i]->npoints, opts->npoints);
