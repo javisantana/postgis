@@ -2848,7 +2848,7 @@ CREATE OR REPLACE FUNCTION ST_Simplify(geometry, float8)
 -- Availability: 2.2.0
 CREATE OR REPLACE FUNCTION ST_SimplifyPreserveStructure(geometry, float8, flags int4 DEFAULT 1)
 	RETURNS geometry
-	AS 'MODULE_PATHNAME', 'LWGEOM_SimplifyExtended2d'
+	AS 'MODULE_PATHNAME', 'LWGEOM_SimplifyPreserveStructure'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 	
 -- Availability: 2.2.0
