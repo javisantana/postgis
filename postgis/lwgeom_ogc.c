@@ -174,7 +174,8 @@ Datum geometry_geometrytype(PG_FUNCTION_ARGS)
 	text *type_text;
 	char *type_str = palloc(32);
 
-	lwgeom = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+	// read the header from the toast
+	lwgeom = (GSERIALIZED*)PG_DETOAST_DATUM_SLICE(PG_GETARG_DATUM(0), 0, gserialized_get_header_size());
 
 	/* Make it empty string to start */
 	*type_str = 0;

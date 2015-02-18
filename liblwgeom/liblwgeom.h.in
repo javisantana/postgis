@@ -650,6 +650,11 @@ extern LWTIN* lwtin_add_lwtriangle(LWTIN *mobj, const LWTRIANGLE *obj);
 */
 extern uint8_t gflags(int hasz, int hasm, int geodetic);
 
+/** 
+ * Returns the size in bytes to read from toast to get the basic information from a geometry: GSERIALIZED struct bbox and type 
+ */
+extern uint32_t gserialized_get_header_size();
+
 /**
 * Extract the geometry type from the serialized form (it hides in 
 * the anonymous data area, so this is a handy function).

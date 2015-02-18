@@ -42,6 +42,12 @@ int gserialized_ndims(const GSERIALIZED *gser)
 	return FLAGS_NDIMS(gser->flags);
 }
 
+uint32_t gserialized_get_header_size() 
+{
+	/* read GSERIALIZED size + max bbox according gbox_serialized_size (2 + Z + M) + 1 byte for type */
+	return sizeof(GSERIALIZED) + 8 * sizeof(float) + 1;
+
+}
 uint32_t gserialized_get_type(const GSERIALIZED *s)
 {
 	uint32_t *ptr;
