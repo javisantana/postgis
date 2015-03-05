@@ -91,9 +91,11 @@ Datum gserialized_estimated_extent(PG_FUNCTION_ARGS);
 Datum _postgis_gserialized_sel(PG_FUNCTION_ARGS);
 Datum _postgis_gserialized_joinsel(PG_FUNCTION_ARGS);
 Datum _postgis_gserialized_stats(PG_FUNCTION_ARGS);
+Datum _postgis_quadtree_stats(PG_FUNCTION_ARGS);
 
 /* Old Prototype */
 Datum geometry_estimated_extent(PG_FUNCTION_ARGS);
+
 
 /**
 * Assign a number to the n-dimensional statistics kind
@@ -207,7 +209,17 @@ typedef struct ND_STATS_T
 	float4 value[1];
 } ND_STATS;
 
+typedef struct QUADTREE_STATS_T {
+	int zoom;
+	int x;
+	int y;
+	int size_x;
+	int size_y;
+	float* selectivity;
+} QUADTREE_STATS;
 
+
+void quadtree_get_tiles(const ND_STATS* nd_stats, QUADTREE_STATS* quadtree);
 
 
 /**
@@ -392,6 +404,30 @@ nd_box_to_json(const ND_BOX *nd_box, int ndims)
 	return rv;	
 }
 
+static char*
+quadtree_to_json(const QUADTREE_STATS *quadtree) {
+	int i, j;
+	char *str;
+	float s;
+	stringbuffer_t *sb = stringbuffer_create();
+	stringbuffer_append(sb, "{");
+	for (i = 0; i < quadtree->size_x; ++i) {
+		for (j = 0; j < quadtree->size_y; ++j) {
+			float s = quadtree->selectivity[i * quadtree->size_y + j];
+			if (s > 0.0) {
+				stringbuffer_aprintf(sb, "\"%d/%d/%d\":%f,",
+					quadtree->zoom,
+					quadtree->x + i,
+					quadtree->y + j,
+					quadtree->selectivity[i * quadtree->size_y + j]);
+			}
+		}
+	}
+	stringbuffer_append(sb, "\"p\": 0.0}");
+	str = stringbuffer_getstringcopy(sb);
+	stringbuffer_destroy(sb);
+	return str;
+}
 
 /**
 * Convert an #ND_STATS to a JSON representation for 
@@ -1935,6 +1971,41 @@ Datum _postgis_gserialized_stats(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(json);
 }
 
+/**_postgis_gserialized_stats
+CREATE OR REPLACE FUNCTION _postgis_quadtree_stats(tbl regclass, att_name text, text default '2')
+RETURNS text
+AS '$libdir/postgis-2.2', '_postgis_quadtree_stats'
+LANGUAGE 'c' STRICT;
+*/
+PG_FUNCTION_INFO_V1(_postgis_quadtree_stats);
+Datum _postgis_quadtree_stats(PG_FUNCTION_ARGS)
+{
+	Oid table_oid = PG_GETARG_OID(0);
+	text *att_text = PG_GETARG_TEXT_P(1);
+	ND_STATS *nd_stats;
+	QUADTREE_STATS quadtree;
+	char *str;
+	text *json;
+	int mode = 2; /* default to 2D mode */
+	
+	/* Check if we've been asked to not use 2d mode */
+	if ( ! PG_ARGISNULL(2) )
+		mode = text_p_get_mode(PG_GETARG_TEXT_P(2));
+
+	/* Retrieve the stats object */
+	nd_stats = pg_get_nd_stats_by_name(table_oid, att_text, mode);
+	if ( ! nd_stats )
+		elog(ERROR, "stats for \"%s.%s\" do not exist", get_rel_name(table_oid), text2cstring(att_text));
+		
+	/* Convert to JSON */
+	quadtree_get_tiles(nd_stats, &quadtree);
+	str = quadtree_to_json(&quadtree);
+	json = cstring2text(str);
+	pfree(str);
+	pfree(nd_stats);
+	PG_RETURN_TEXT_P(json);
+}
+
 
 /**
 * Utility function to read the calculated selectivity for a given search
@@ -1972,6 +2043,125 @@ Datum _postgis_gserialized_sel(PG_FUNCTION_ARGS)
 	
 	pfree(nd_stats);
 	PG_RETURN_FLOAT8(selectivity);
+}
+
+#define EARTH_RADIUS 6378000
+double quadtree_tile_size(int zoom);
+GBOX* quadtree_gbox_from_tile(GBOX* gbox, int zoom, int x, int y);
+float4 quadtree_zoom_from_cell_size(float4 cell_size);
+unsigned int dim_to_tile(float4 dim, int zoom);
+
+double
+quadtree_tile_size(int zoom) 
+{
+	double num_tiles = pow(2.0, (double)zoom);
+	POSTGIS_DEBUGF(3, "%f %d", num_tiles, zoom);
+	double width = EARTH_RADIUS * 2 * M_PI; /* 6378000 */
+	return width / num_tiles;
+}
+
+/* returns the nd_box for given zoom level */
+GBOX*
+quadtree_gbox_from_tile(GBOX* gbox, int zoom, int x, int y)
+{
+	double tile_size = quadtree_tile_size(zoom);
+
+	const double center = EARTH_RADIUS * M_PI;
+
+	gbox->xmin = x * tile_size - center;
+	gbox->xmax = (x + 1) * tile_size - center;
+	gbox->ymin = y * tile_size - center;
+	gbox->ymax = (y + 1) * tile_size - center;
+
+	POSTGIS_DEBUGF(3, "%d/%d/%d %f", zoom, x, y, tile_size);
+
+	FLAGS_SET_GEODETIC(gbox->flags, 0);
+	FLAGS_SET_Z(gbox->flags, 0);
+	FLAGS_SET_M(gbox->flags, 0);
+
+	return gbox;
+}
+
+/* calculates the closed zoom level given a cell size */
+float4
+quadtree_zoom_from_cell_size(float4 cell_size) 
+{
+	double width = EARTH_RADIUS * 2 * M_PI; /* 6378000 */
+	return log(width/cell_size)/log(2);
+}
+
+unsigned int
+dim_to_tile(float4 dim, int zoom) 
+{
+	double tile_size = quadtree_tile_size(zoom);
+	dim += EARTH_RADIUS * M_PI;
+	return floor(dim/tile_size);
+}
+
+
+void
+quadtree_get_tiles(const ND_STATS* nd_stats, QUADTREE_STATS* quadtree) {
+	int d;
+	float4 emin[2];
+	float4 emax[2];
+	float4 cell_size_dim[2];
+	float4 cell_size;
+	int zoom, i, j;
+	GBOX gbox;
+	float selectivity;
+	int tile_x, tile_y, tile_x_max, tile_y_max;
+
+	if (nd_stats->ndims != 2) {
+		elog(ERROR, "quadtree only allow 2 dimensions geometries");
+	}
+
+	/* get the cell size */
+	for (d = 0; d < nd_stats->ndims; d++ )
+	{
+		/* Cell size in each dim */
+		emin[d] = nd_stats->extent.min[d];
+		emax[d] = nd_stats->extent.max[d];
+		cell_size_dim[d] = (emax[d] - emin[d]) / nd_stats->size[d];
+		POSTGIS_DEBUGF(3, " cell_size[%d] : %.9g", d, cell_size_dim[d]);
+	}
+
+	/* max cel size */
+	cell_size = cell_size_dim[0] > cell_size_dim[1] ?  cell_size_dim[0] : cell_size_dim[1];
+
+	/* zoom level in wich the cell size is closer to it */
+	zoom = floor(quadtree_zoom_from_cell_size(cell_size));
+	POSTGIS_DEBUGF(3, " zoom level: %d", zoom);
+
+	/* for each tile get the estimated number of features */
+
+	tile_x = dim_to_tile(emin[0], zoom);
+	tile_x_max = dim_to_tile(emax[0], zoom) + 1;
+	tile_y = dim_to_tile(emin[1], zoom);
+	tile_y_max = dim_to_tile(emax[1], zoom) + 1;
+
+	POSTGIS_DEBUGF(3, "tiles: %d/%d %d/%d", tile_x, tile_x_max, tile_y, tile_y_max);
+	
+	quadtree->zoom = zoom;
+	quadtree->x = tile_x;
+	quadtree->y = tile_x;
+	quadtree->size_x = tile_x_max - tile_x;
+	quadtree->size_y = tile_y_max - tile_y;
+	quadtree->selectivity = palloc(sizeof(float) * quadtree->size_y * quadtree->size_x);
+
+	for (i = tile_x; i < tile_x_max; ++i) 
+	{
+		for (j = tile_y; j < tile_y_max; ++j) {
+			/* build the gbox for the tile */
+			quadtree_gbox_from_tile(&gbox, zoom, i, j);
+			POSTGIS_DEBUGF(3, " %s", gbox_to_string(&gbox));
+
+			/* estimated rows */
+			selectivity = estimate_selectivity(&gbox, nd_stats, 2 /* dims */);
+			quadtree->selectivity[(i - tile_x) * quadtree->size_y + (j - tile_y)] = selectivity;
+			POSTGIS_DEBUGF(3, "s2: %d/%d/%d => %f", zoom, i, j, selectivity);
+		}
+	}
+
 }
 
 
